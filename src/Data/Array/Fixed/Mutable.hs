@@ -83,12 +83,6 @@ unsafeWrite (MArray fptr) ix a = withForeignPtr fptr
 set :: forall s i a. Storable a => Mode i -> MArray s i a -> a -> IO ()
 set mode marray a = withRangeIndices mode (\ix -> unsafeWrite marray ix a)
 
-test :: IO ()
-test = do
-  t <- new (Proxy :: Proxy (4:.4:.Z))
-  set Unroll t 'a'
-  set Roll t 'b'
-
 --------------------------------------------------------------------------------
 -- Creation
 
