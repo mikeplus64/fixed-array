@@ -17,6 +17,8 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.Array.Fixed.Mutable
+                     , Data.Array.Fixed
+                     , Data.Array.Fixed.Base
   -- other-modules:       
   other-extensions:    DataKinds
                      , NullaryTypeClasses

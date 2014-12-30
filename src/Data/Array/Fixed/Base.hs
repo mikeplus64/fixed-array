@@ -45,3 +45,6 @@ forArrayIx
   -> f ()
 forArrayIx _ m f = withRangeIndices m f
 
+--------------------------------------------------------------------------------
+-- Conversions
+
