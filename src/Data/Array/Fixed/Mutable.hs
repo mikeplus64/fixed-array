@@ -240,6 +240,7 @@ mloadM m arr = do
     e <- unsafeIndex arr ix
     unsafeWrite res ix e
 
+{-# INLINE mloadList #-}
 mloadList
   :: forall dim e m. (Applicative m, PrimMonad m, Storable e)
   => [e] -> Create dim e m ()
