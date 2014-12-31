@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -11,7 +12,7 @@
 module Data.Array.Fixed.Mutable
   ( MArray
     -- * Information
-  , size
+  , size, proxySize
     -- * Basic operations
     -- ** Reading
   , index, unsafeIndex
@@ -20,15 +21,20 @@ module Data.Array.Fixed.Mutable
 
     -- * Loops
   , for, for2
+  , mfor
 
     -- * Creation
   , new, copy
     -- ** Monadic creation interface
   , Create
+  , create
+  , freezeIO
   , freezeST
     -- *** Basic operations
     -- **** Writing
   , (<~), (!<~), mset
+  , mload
+  , mloadM
     -- *** Type hints
   , msize, mof
 
@@ -140,6 +146,14 @@ for
   -> m ()
 for m arr f = withRangeIndices m $ \ix -> f ix =<< unsafeIndex arr ix
 
+{-# INLINE mfor #-}
+mfor
+  :: (Applicative m, PrimMonad m, Storable a)
+  => Mode i
+  -> (Int -> Create i a m ())
+  -> Create i a m ()
+mfor m f = withRangeIndices m f
+
 {-# INLINE for2 #-}
 for2
   :: (Applicative m, PrimMonad m, Storable a)
@@ -169,14 +183,20 @@ instance MonadTrans (Create dim e) where lift = Create . lift
 {-# INLINE freezeST #-}
 freezeST :: (Storable e, Dim i) => Create i e (ST s) () -> ST s (Array i e)
 freezeST (Create c) = do
-  arr <- unsafeInterleaveST (new Proxy)
+  arr <- new Proxy
   runReaderT c arr
   return (unsafeFreeze arr)
+
+{-# INLINE create #-}
+-- | Create an array from a 'Create' computation. Uninitialised elements are
+-- left uninitialised.
+create :: (Storable e, Dim i) => (forall s. Create i e (ST s) ()) -> Array i e
+create a = runST (freezeST a)
 
 {-# INLINE freezeIO #-}
 freezeIO :: (Storable e, Dim i) => Mode i -> Create i e IO () -> IO (Array i e)
 freezeIO m (Create c) = do
-  arr <- unsafeInterleaveIO (new Proxy)
+  arr <- new Proxy
   runReaderT c arr
   freeze m arr
 
@@ -187,6 +207,45 @@ mset
 mset m a = do
   arr <- ask
   lift (set m arr a)
+
+{-# INLINE mload #-}
+mload :: (Rank n dim, PrimMonad m, Applicative m, Storable e)
+      => Mode n -> Array n e -> Create dim e m ()
+mload m arr = mloadM m (unsafeThaw arr)
+
+{-# INLINE mloadAll #-}
+mloadAll
+  :: (Rank dim dim, PrimMonad m, Applicative m, Storable e)
+  => Mode dim
+  -> Array dim e
+  -> Create dim e m ()
+mloadAll m arr = mloadM m (unsafeThaw arr)
+
+{-# INLINE mloadAllM #-}
+mloadAllM
+  :: (Rank dim dim, PrimMonad m, Applicative m, Storable e)
+  => Mode dim
+  -> MArray (PrimState m) dim e
+  -> Create dim e m ()
+mloadAllM m arr = mloadM m arr
+
+{-# INLINE mloadM #-}
+mloadM
+  :: (Rank n dim, PrimMonad m, Applicative m, Storable e)
+  => Mode n -> MArray (PrimState m) n e -> Create dim e m ()
+mloadM m arr = do
+  res <- ask
+  lift $ withRangeIndices m $ \ix -> do
+    e <- unsafeIndex arr ix
+    unsafeWrite res ix e
+
+mloadList :: (Applicative m, PrimMonad m, Storable e) => [e] -> Create dim e m ()
+mloadList list = do
+  arr <- ask
+  let
+    go !ix (x:xs) = unsafeWrite arr ix x *> go (ix+1) xs
+    go _   []     = pure ()
+  lift (go 0 list)
 
 {-# INLINE (<~) #-}
 -- | Write to an index.
