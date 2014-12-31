@@ -35,6 +35,7 @@ module Data.Array.Fixed.Mutable
   , (<~), (!<~), mset
   , mload
   , mloadM
+  , mloadList
     -- *** Type hints
   , msize, mof
 
@@ -239,10 +240,14 @@ mloadM m arr = do
     e <- unsafeIndex arr ix
     unsafeWrite res ix e
 
-mloadList :: (Applicative m, PrimMonad m, Storable e) => [e] -> Create dim e m ()
+mloadList
+  :: forall dim e m. (Applicative m, PrimMonad m, Storable e)
+  => [e] -> Create dim e m ()
 mloadList list = do
   arr <- ask
   let
+    {-# INLINE go #-}
+    go :: Int -> [e] -> m ()
     go !ix (x:xs) = unsafeWrite arr ix x *> go (ix+1) xs
     go _   []     = pure ()
   lift (go 0 list)
