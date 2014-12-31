@@ -101,6 +101,7 @@ unsafeWrite (MArray fptr) ix a =
   unsafePrimToPrim $
   withForeignPtr fptr (\ptr -> pokeElemOff ptr ix a)
 
+
 {-# INLINE set #-}
 -- | Set every element.
 set :: forall m i a. (PrimMonad m, Applicative m, Storable a)
@@ -246,12 +247,13 @@ mloadList
   => [e] -> Create dim e m ()
 mloadList list = do
   arr <- ask
-  let
-    {-# INLINE go #-}
-    go :: Int -> [e] -> m ()
-    go !ix (x:xs) = unsafeWrite arr ix x *> go (ix+1) xs
-    go _   []     = pure ()
-  lift (go 0 list)
+
+  lift $! do
+    let
+      go !ix (x:xs) = unsafeWrite arr ix x *> go (ix+1) xs
+      go _   []     = pure ()
+
+    go 0 list
 
 {-# INLINE (<~) #-}
 -- | Write to an index.
