@@ -41,9 +41,10 @@ modify f arr = runST $ do
   return (Array fptr)
 
 --------------------------------------------------------------------------------
--- Mapping
+-- Element-wise operations
 
 {-# INLINE map #-}
+-- | Map over an array.
 map :: (Storable a, Storable b, Dim i)
     => Mode i -> (a -> b) -> Array i a -> Array i b
 map m f arr = runST $ do
@@ -55,9 +56,15 @@ map m f arr = runST $ do
 --------------------------------------------------------------------------------
 -- Folding
 
+{-# INLINE foldl #-}
+-- | Strict left fold over an array.
 foldl :: Storable a => Mode n -> (b -> a -> b) -> b -> Array i a -> b
 foldl m f z arr = foldlRangeIndices m (\b ix -> f b (arr!>ix)) z
 
+{-# INLINE foldr #-}
+-- | Lazy right fold over an array.
 foldr :: Storable a => Mode n -> (a -> b -> b) -> b -> Array i a -> b
 foldr m f z arr = foldrRangeIndices m (\ix b -> f (arr!>ix) b) z
+
+
 

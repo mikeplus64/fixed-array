@@ -16,10 +16,8 @@ import           Foreign.ForeignPtr
 -- | An @Array i a@ is an array with indices bounded by @i@.
 newtype MArray s i a = MArray (ForeignPtr a)
 newtype Array i a = Array (ForeignPtr a)
-{-
 type role MArray nominal representational representational
 type role Array representational representational
--}
 
 {-# INLINE size #-}
 size :: forall array i a. Dim i => array i a -> Int
@@ -44,7 +42,3 @@ forArrayIx
   -> (Int -> f ())
   -> f ()
 forArrayIx _ m f = withRangeIndices m f
-
---------------------------------------------------------------------------------
--- Conversions
-

@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -21,30 +20,16 @@ module Data.Array.Fixed.Mutable
 
     -- * Loops
   , for, for2
-  , mfor
 
     -- * Creation
   , new, copy
-    -- ** Monadic creation interface
-  , Create
-  , create
-  , freezeIO
-  , freezeST
-    -- *** Basic operations
-    -- **** Writing
-  , (<~), (!<~), mset
-  , mload
-  , mloadM
-  , mloadList
-    -- *** Type hints
-  , msize, mof
 
-    -- * Conversion
+     -- * Conversion
   , thaw, unsafeThaw
   , freeze, unsafeFreeze
 
     -- * `indices` re-exports
-  , Z(..), (:.)(..), (.:), Mode(..), dim, dimr, dimu, Dim(toIndex,fromIndex)
+  , Z(..), (.:), Mode(..), Dim(toIndex,fromIndex), withRange, withRangeIndices
   )
   where
 import           Control.Applicative
@@ -148,14 +133,6 @@ for
   -> m ()
 for m arr f = withRangeIndices m $ \ix -> f ix =<< unsafeIndex arr ix
 
-{-# INLINE mfor #-}
-mfor
-  :: (Applicative m, PrimMonad m, Storable a)
-  => Mode i
-  -> (Int -> Create i a m ())
-  -> Create i a m ()
-mfor m f = withRangeIndices m f
-
 {-# INLINE for2 #-}
 for2
   :: (Applicative m, PrimMonad m, Storable a)
@@ -169,116 +146,6 @@ for2 m arr0 arr1 f =
     e0 <- unsafeIndex arr0 ix
     e1 <- unsafeIndex arr1 ix
     f ix e0 e1
-
---------------------------------------------------------------------------------
--- Monadic creation interface
-
-newtype Create dim e m a = Create (ReaderT (MArray (PrimState m) dim e) m a)
-  deriving (Monad, Functor, Applicative)
-
-deriving instance
-  (PrimMonad m, s ~ PrimState m) => MonadReader (MArray s n e) (Create n e m)
-
-deriving instance MonadIO (Create dim e IO)
-instance MonadTrans (Create dim e) where lift = Create . lift
-
-{-# INLINE freezeST #-}
-freezeST :: (Storable e, Dim i) => Create i e (ST s) () -> ST s (Array i e)
-freezeST (Create c) = do
-  arr <- new Proxy
-  runReaderT c arr
-  return (unsafeFreeze arr)
-
-{-# INLINE create #-}
--- | Create an array from a 'Create' computation. Uninitialised elements are
--- left uninitialised.
-create :: (Storable e, Dim i) => (forall s. Create i e (ST s) ()) -> Array i e
-create a = runST (freezeST a)
-
-{-# INLINE freezeIO #-}
-freezeIO :: (Storable e, Dim i) => Mode i -> Create i e IO () -> IO (Array i e)
-freezeIO m (Create c) = do
-  arr <- new Proxy
-  runReaderT c arr
-  freeze m arr
-
-{-# INLINE mset #-}
-mset
-  :: (PrimMonad m, Applicative m, Storable e)
-  => Mode dim -> e -> Create dim e m ()
-mset m a = do
-  arr <- ask
-  lift (set m arr a)
-
-{-# INLINE mload #-}
-mload :: (Rank n dim, PrimMonad m, Applicative m, Storable e)
-      => Mode n -> Array n e -> Create dim e m ()
-mload m arr = mloadM m (unsafeThaw arr)
-
-{-# INLINE mloadAll #-}
-mloadAll
-  :: (Rank dim dim, PrimMonad m, Applicative m, Storable e)
-  => Mode dim
-  -> Array dim e
-  -> Create dim e m ()
-mloadAll m arr = mloadM m (unsafeThaw arr)
-
-{-# INLINE mloadAllM #-}
-mloadAllM
-  :: (Rank dim dim, PrimMonad m, Applicative m, Storable e)
-  => Mode dim
-  -> MArray (PrimState m) dim e
-  -> Create dim e m ()
-mloadAllM m arr = mloadM m arr
-
-{-# INLINE mloadM #-}
-mloadM
-  :: (Rank n dim, PrimMonad m, Applicative m, Storable e)
-  => Mode n -> MArray (PrimState m) n e -> Create dim e m ()
-mloadM m arr = do
-  res <- ask
-  lift $ withRangeIndices m $ \ix -> do
-    e <- unsafeIndex arr ix
-    unsafeWrite res ix e
-
-{-# INLINE mloadList #-}
-mloadList
-  :: forall dim e m. (Applicative m, PrimMonad m, Storable e)
-  => [e] -> Create dim e m ()
-mloadList list = do
-  arr <- ask
-
-  lift $! do
-    let
-      go !ix (x:xs) = unsafeWrite arr ix x *> go (ix+1) xs
-      go _   []     = pure ()
-
-    go 0 list
-
-{-# INLINE (<~) #-}
--- | Write to an index.
-(<~) :: (PrimMonad m, Dim dim, Storable e) => dim -> e -> Create dim e m ()
-(<~) ix e = toIndex ix !<~ e
-
-infixr 4 <~
-infixr 4 !<~
-
-{-# INLINE (!<~) #-}
--- | Unsafe write to an index. Bounds are not checked.
-(!<~) :: (PrimMonad m, Storable e) => Int -> e -> Create dim e m ()
-(!<~) ix e = do
-  arr <- ask
-  lift (unsafeWrite arr ix e)
-
---------------------------------------------------------------------------------
--- Hints
-
-msize :: Applicative m => Proxy dim -> Create dim e m ()
-msize _ = pure ()
-
-mof :: Applicative m => a -> Create dim e m ()
-mof _ = pure ()
-
 --------------------------------------------------------------------------------
 -- Conversions
 
